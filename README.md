@@ -8,3 +8,5 @@ A lightweight Verilog implementation of the AXI4-Lite protocol featuring an inte
 - **Testbench (`tb_axi4_lite.v`)**: Verifies full write-then-read back functionality and detects data mismatches automatically.
 
 ## Repository Structure
+
+# [axi4-lite-interface](https://github.com/bsmahesh850-droid/axi4-lite-interface)
