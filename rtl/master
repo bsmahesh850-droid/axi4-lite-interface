@@ -1,0 +1,10 @@
+[ MASTER ]                                  [ SLAVE ]
+  
+              --- WRITE CHANNELS ---
+  (1) Write Address  =======================>  "Where do I put this write?"
+  (2) Write Data     =======================>  "Here is the data to save!"
+  (3) Write Response <-----------------------  "Done! Saved successfully."
+
+              --- READ CHANNELS ---
+  (4) Read Address   =======================>  "Where should I read from?"
+  (5) Read Data      <-----------------------  "Here is the data you asked for!"
