@@ -559,6 +559,37 @@
             </div>
         </section>
 
+        <!-- 07. HARDWARE VALIDATION & WAVEFORM SCREENSHOT -->
+        <section id="screenshot" class="space-y-4">
+            <div>
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="image" class="w-5 h-5 text-cyanAccent"></i>
+                    07. Hardware Validation & Scope/Waveform Screenshot
+                </h2>
+                <p class="text-xs text-slate-400">Upload or link your hardware testbench / Vivado waveform capture screenshot here.</p>
+            </div>
+
+            <div class="bg-silicon-900 p-6 rounded-xl border border-slate-800 space-y-4 shadow-xl">
+                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-mono text-slate-300 font-bold">SCREENSHOT / IMAGE SOURCE URL or FILE:</label>
+                        <p class="text-[11px] text-slate-500 font-mono">Replace with your image path (e.g. <code class="text-cyanAccent">./assets/waveform_screenshot.png</code>) or select a file locally.</p>
+                    </div>
+                    <div class="flex items-center gap-2 font-mono text-xs">
+                        <input type="file" id="screenshot-file-input" accept="image/*" onchange="window.handleImageUpload(event)" class="hidden">
+                        <button onclick="document.getElementById('screenshot-file-input').click()" class="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyanAccent border border-cyan-500/40 transition flex items-center gap-1.5">
+                            <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Screenshot
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Image Display Box -->
+                <div class="w-full min-h-[250px] bg-silicon-950 rounded-xl border border-slate-800/80 flex items-center justify-center p-4 relative overflow-hidden group">
+                    <img id="screenshot-img" src="https://placehold.co/1200x500/0b0f19/06b6d4?text=Vivado+Logic+Analyzer+%2F+ModelSim+Waveform+Screenshot" alt="Hardware Validation Screenshot" class="max-w-full h-auto max-h-[500px] rounded-lg shadow-lg object-contain border border-slate-800/50" onerror="this.src='https://placehold.co/1200x500/0b0f19/f43f5e?text=Image+Not+Found'">
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <!-- FOOTER -->
@@ -1045,6 +1076,19 @@ endmodule`
                 log.innerText = `[SYSTEM] Verilog source code copied to clipboard successfully!`;
                 consoleBox.appendChild(log);
                 consoleBox.scrollTop = consoleBox.scrollHeight;
+            }
+        };
+
+        // 5. SCREENSHOT IMAGE UPLOADER HANDLER
+        window.handleImageUpload = function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('screenshot-img');
+                    if (img) img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
             }
         };
 
