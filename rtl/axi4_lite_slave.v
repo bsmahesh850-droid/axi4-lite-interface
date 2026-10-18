@@ -1,140 +1,158 @@
-`timescale 1ns/1ps
+module axi4_lite_slave #(
+    parameter integer C_S_AXI_DATA_WIDTH = 32,
+    parameter integer C_S_AXI_ADDR_WIDTH = 4
+)(
+    // Global System Signals
+    input  wire                              S_AXI_ACLK,
+    input  wire                              S_AXI_ARESETN,
 
-// Small memory-mapped AXI4-Lite slave with four 32-bit registers.
-// Supported byte strobes; one outstanding write and one outstanding read maximum.
-module axi4_lite_slave (
-    input  wire        clk,
-    input  wire        rst_n,
-    input  wire [31:0] s_axi_awaddr,
-    input  wire        s_axi_awvalid,
-    output wire        s_axi_awready,
-    input  wire [31:0] s_axi_wdata,
-    input  wire [3:0]  s_axi_wstrb,
-    input  wire        s_axi_wvalid,
-    output wire        s_axi_wready,
-    output reg  [1:0]  s_axi_bresp,
-    output reg         s_axi_bvalid,
-    input  wire        s_axi_bready,
-    input  wire [31:0] s_axi_araddr,
-    input  wire        s_axi_arvalid,
-    output wire        s_axi_arready,
-    output reg  [31:0] s_axi_rdata,
-    output reg  [1:0]  s_axi_rresp,
-    output reg         s_axi_rvalid,
-    input  wire        s_axi_rready
+    // Write Address Channel
+    input  wire [C_S_AXI_ADDR_WIDTH-1:0]     S_AXI_AWADDR,
+    input  wire [2:0]                        S_AXI_AWPROT,
+    input  wire                              S_AXI_AWVALID,
+    output reg                               S_AXI_AWREADY,
+
+    // Write Data Channel
+    input  wire [C_S_AXI_DATA_WIDTH-1:0]     S_AXI_WDATA,
+    input  wire [(C_S_AXI_DATA_WIDTH/8)-1:0] S_AXI_WSTRB,
+    input  wire                              S_AXI_WVALID,
+    output reg                               S_AXI_AWREADY, // Wait, watch naming: S_AXI_WREADY
+    output reg                               S_AXI_WREADY,
+
+    // Write Response Channel
+    output reg  [1:0]                        S_AXI_BRESP,
+    output reg                               S_AXI_BVALID,
+    input  wire                              S_AXI_BREADY,
+
+    // Read Address Channel
+    input  wire [C_S_AXI_ADDR_WIDTH-1:0]     S_AXI_ARADDR,
+    input  wire [2:0]                        S_AXI_ARPROT,
+    input  wire                              S_AXI_ARVALID,
+    output reg                               S_AXI_ARREADY,
+
+    // Read Data Channel
+    output reg  [C_S_AXI_DATA_WIDTH-1:0]     S_AXI_RDATA,
+    output reg  [1:0]                        S_AXI_RRESP,
+    output reg                               S_AXI_RVALID,
+    input  wire                              S_AXI_RREADY
 );
-    localparam [1:0] RESP_OKAY = 2'b00, RESP_SLVERR = 2'b10;
 
-    reg [31:0] reg0, reg1, reg2, reg3;
-    reg [31:0] awaddr_hold, wdata_hold;
-    reg [3:0]  wstrb_hold;
-    reg        have_aw, have_w;
+    // Internal Register Map
+    // 0x00: Control Register
+    // 0x04: Status Register
+    // 0x08: Data Input Register
+    // 0x0C: Data Output Register (Data In * 2 computed)
+    reg [C_S_AXI_DATA_WIDTH-1:0] reg_control;
+    reg [C_S_AXI_DATA_WIDTH-1:0] reg_status;
+    reg [C_S_AXI_DATA_WIDTH-1:0] reg_data_in;
+    wire [C_S_AXI_DATA_WIDTH-1:0] reg_data_out;
 
-    wire aw_fire = s_axi_awvalid && s_axi_awready;
-    wire w_fire  = s_axi_wvalid  && s_axi_wready;
-    wire ar_fire = s_axi_arvalid && s_axi_arready;
+    assign reg_data_out = reg_data_in << 1; // Simple hardware accelerator logic
 
-    // Four word-aligned addresses: 0x00, 0x04, 0x08, 0x0C.
-    function address_valid;
-        input [31:0] addr;
-        begin
-            address_valid = (addr[31:4] == 28'd0) && (addr[1:0] == 2'b00);
-        end
-    endfunction
+    // Write State Machine Variables
+    reg [C_S_AXI_ADDR_WIDTH-1:0] axi_awaddr;
+    reg                          slv_reg_wren;
 
-    function [31:0] read_word;
-        input [31:0] addr;
-        begin
-            case (addr[3:2])
-                2'b00: read_word = reg0;
-                2'b01: read_word = reg1;
-                2'b10: read_word = reg2;
-                2'b11: read_word = reg3;
-                default: read_word = 32'b0;
-            endcase
-        end
-    endfunction
-
-    assign s_axi_awready = !have_aw && !s_axi_bvalid;
-    assign s_axi_wready  = !have_w  && !s_axi_bvalid;
-    assign s_axi_arready = !s_axi_rvalid;
-
-    task apply_write;
-        input [31:0] addr;
-        input [31:0] data;
-        input [3:0]  strb;
-        begin
-            case (addr[3:2])
-                2'b00: begin
-                    if (strb[0]) reg0[7:0]   <= data[7:0];
-                    if (strb[1]) reg0[15:8]  <= data[15:8];
-                    if (strb[2]) reg0[23:16] <= data[23:16];
-                    if (strb[3]) reg0[31:24] <= data[31:24];
-                end
-                2'b01: begin
-                    if (strb[0]) reg1[7:0]   <= data[7:0];
-                    if (strb[1]) reg1[15:8]  <= data[15:8];
-                    if (strb[2]) reg1[23:16] <= data[23:16];
-                    if (strb[3]) reg1[31:24] <= data[31:24];
-                end
-                2'b10: begin
-                    if (strb[0]) reg2[7:0]   <= data[7:0];
-                    if (strb[1]) reg2[15:8]  <= data[15:8];
-                    if (strb[2]) reg2[23:16] <= data[23:16];
-                    if (strb[3]) reg2[31:24] <= data[31:24];
-                end
-                2'b11: begin
-                    if (strb[0]) reg3[7:0]   <= data[7:0];
-                    if (strb[1]) reg3[15:8]  <= data[15:8];
-                    if (strb[2]) reg3[23:16] <= data[23:16];
-                    if (strb[3]) reg3[31:24] <= data[31:24];
-                end
-            endcase
-        end
-    endtask
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            reg0 <= 32'b0; reg1 <= 32'b0; reg2 <= 32'b0; reg3 <= 32'b0;
-            awaddr_hold <= 32'b0; wdata_hold <= 32'b0; wstrb_hold <= 4'b0;
-            have_aw <= 1'b0; have_w <= 1'b0;
-            s_axi_bresp <= RESP_OKAY; s_axi_bvalid <= 1'b0;
-            s_axi_rdata <= 32'b0; s_axi_rresp <= RESP_OKAY; s_axi_rvalid <= 1'b0;
+    // ------------------------------------------------
+    // Write Handshake Logic
+    // ------------------------------------------------
+    always @(posedge S_AXI_ACLK) begin
+        if (!S_AXI_ARESETN) begin
+            S_AXI_AWREADY <= 1'b0;
+            S_AXI_WREADY  <= 1'b0;
+            S_AXI_BVALID  <= 1'b0;
+            S_AXI_BRESP   <= 2'b00;
+            reg_control   <= 0;
+            reg_data_in   <= 0;
+            reg_status    <= 32'h00000001; // Ready status
         end else begin
-            if (aw_fire) begin awaddr_hold <= s_axi_awaddr; have_aw <= 1'b1; end
-            if (w_fire) begin
-                wdata_hold <= s_axi_wdata;
-                wstrb_hold <= s_axi_wstrb;
-                have_w <= 1'b1;
+            // Write Address Acceptance
+            if (!S_AXI_AWREADY && S_AXI_AWVALID && S_AXI_WVALID) begin
+                S_AXI_AWREADY <= 1'b1;
+                axi_awaddr    <= S_AXI_AWADDR;
+            end else begin
+                S_AXI_AWREADY <= 1'b0;
             end
 
-            // Commit a write only after both independent channels have arrived.
-            if (have_aw && have_w && !s_axi_bvalid) begin
-                if (address_valid(awaddr_hold)) begin
-                    apply_write(awaddr_hold, wdata_hold, wstrb_hold);
-                    s_axi_bresp <= RESP_OKAY;
-                end else begin
-                    s_axi_bresp <= RESP_SLVERR;
-                end
-                have_aw <= 1'b0;
-                have_w <= 1'b0;
-                s_axi_bvalid <= 1'b1;
+            // Write Data Acceptance
+            if (!S_AXI_WREADY && S_AXI_WVALID && S_AXI_AWVALID) begin
+                S_AXI_WREADY <= 1'b1;
+            end else begin
+                S_AXI_WREADY <= 1'b0;
             end
-            if (s_axi_bvalid && s_axi_bready)
-                s_axi_bvalid <= 1'b0;
 
-            if (ar_fire) begin
-                if (address_valid(s_axi_araddr)) begin
-                    s_axi_rdata <= read_word(s_axi_araddr);
-                    s_axi_rresp <= RESP_OKAY;
-                end else begin
-                    s_axi_rdata <= 32'b0;
-                    s_axi_rresp <= RESP_SLVERR;
-                end
-                s_axi_rvalid <= 1'b1;
+            // Write Execution & Response Generation
+            if (S_AXI_AWREADY && S_AXI_AWVALID && S_AXI_WREADY && S_AXI_WVALID && !S_AXI_BVALID) begin
+                S_AXI_BVALID <= 1'b1;
+                
+                // Address Decoding & Register Write
+                case (axi_awaddr[3:0])
+                    4'h0: begin
+                        reg_control <= S_AXI_WDATA;
+                        S_AXI_BRESP <= 2'b00; // OKAY
+                    end
+                    4'h8: begin
+                        reg_data_in <= S_AXI_WDATA;
+                        S_AXI_BRESP <= 2'b00; // OKAY
+                    end
+                    default: begin
+                        // Unmapped address -> Return DECERR (Decoder Error)
+                        S_AXI_BRESP <= 2'b11; 
+                    end
+                endcase
+            end else if (S_AXI_BVALID && S_AXI_BREADY) begin
+                S_AXI_BVALID <= 1'b0;
             end
-            if (s_axi_rvalid && s_axi_rready)
-                s_axi_rvalid <= 1'b0;
         end
     end
+
+    // ------------------------------------------------
+    // Read Handshake Logic
+    // ------------------------------------------------
+    always @(posedge S_AXI_ACLK) begin
+        if (!S_AXI_ARESETN) begin
+            S_AXI_ARREADY <= 1'b0;
+            S_AXI_RVALID  <= 1'b0;
+            S_AXI_RRESP   <= 2'b00;
+            S_AXI_RDATA   <= 0;
+        end else begin
+            // Read Address Acceptance
+            if (!S_AXI_ARREADY && S_AXI_ARVALID) begin
+                S_AXI_ARREADY <= 1'b1;
+                S_AXI_ARADDR  <= S_AXI_ARADDR;
+            end else begin
+                S_AXI_ARREADY <= 1'b0;
+            end
+
+            // Read Data Generation & Response
+            if (S_AXI_ARREADY && S_AXI_ARVALID && !S_AXI_RVALID) begin
+                S_AXI_RVALID <= 1'b1;
+                case (S_AXI_ARADDR[3:0])
+                    4'h0: begin
+                        S_AXI_RDATA <= reg_control;
+                        S_AXI_RRESP <= 2'b00; // OKAY
+                    end
+                    4'h4: begin
+                        S_AXI_RDATA <= reg_status;
+                        S_AXI_RRESP <= 2'b00; // OKAY
+                    end
+                    4'h8: begin
+                        S_AXI_RDATA <= reg_data_in;
+                        S_AXI_RRESP <= 2'b00; // OKAY
+                    end
+                    4'hC: begin
+                        S_AXI_RDATA <= reg_data_out;
+                        S_AXI_RRESP <= 2'b00; // OKAY
+                    end
+                    default: begin
+                        S_AXI_RDATA <= 32'hDEADBEEF;
+                        S_AXI_RRESP <= 2'b11; // DECERR for invalid read address
+                    end
+                endcase
+            end else if (S_AXI_RVALID && S_AXI_RREADY) begin
+                S_AXI_RVALID <= 1'b0;
+            end
+        end
+    end
+
 endmodule
